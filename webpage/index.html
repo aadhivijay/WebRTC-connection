@@ -1,0 +1,41 @@
+<html>
+
+    <head>
+        <title>WebRTC Video Demo</title>
+        <script src="scripts/index.js"></script>
+    </head>
+
+    <style>
+        body {
+            background: #eee;
+            padding: 5% 0;
+        }
+
+        video {
+            background: black;
+            border: 1px solid gray;
+        }
+    </style>
+
+    <body>
+
+        <div>
+            <h3>Login</h3>
+            <input type="text" id="nameInput">
+            <button id="loginBtn">Login</button>
+        </div>
+
+        <div>
+
+            <video id="localVideo" width="190" height="143" autoplay muted></video>
+            <video id="remoteVideo" width="190" height="143" autoplay muted></video>
+
+            <input type="text" id="callerName">
+            <button id="callBtn">Call</button>
+            <button id="stopBtn">Stop</button>
+
+        </div>
+
+    </body>
+
+</html>
