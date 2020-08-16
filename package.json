@@ -1,6 +1,6 @@
 {
   "name": "webrtc-connection",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "P2P Connection using WebRTC express socket",
   "main": "index.js",
   "scripts": {
@@ -8,14 +8,18 @@
   },
   "keywords": [
     "WebRTC",
+    "PeerJS",
     "express",
-    "socket"
+    "socket",
+    "socket.io"
   ],
   "author": "aadhivijay",
   "license": "ISC",
   "dependencies": {
     "express": "^4.17.1",
-    "ws": "^7.3.1"
+    "peer": "^0.5.3",
+    "socket.io": "^2.3.0",
+    "uuid": "^8.3.0"
   },
   "devDependencies": {
     "nodemon": "^2.0.4"

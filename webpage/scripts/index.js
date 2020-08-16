@@ -1,89 +1,107 @@
 //@ts-check
-var socketConn = new WebSocket('ws://localhost:3000/socket');
-let nameInput;
-let loginBtn;
-
-let localVideo;
-let remoteVideo;
-let callerName;
-let callBtn;
-let stopBtn;
-
-let webRTCConn;
+let socketConn = io('/');
+const myPeer = new Peer(undefined, {
+    host: '/',
+    path: '/peer',
+    port: 3001
+});
+let userId;
+let roomId;
 let localStream;
-let remoteStream;
+let peerList = {};
 
-let myName;
-let friendName;
+let initialCard;
+let playCard;
+
+let createBtn;
+
+let joinInput;
+let joinBtn;
+
+let createInput;
+let videoCard;
+
+let leaveBtn;
+
+window.onload = () => {
+    initializePage();
+}
+
+myPeer.on('open', (id) => {
+    userId = id;
+    console.log(`User Id: ${userId}`);
+});
+
+myPeer.on('call', (call) => {
+    console.log(`Call from ${call.peer}`);
+    call.answer(localStream);
+    const video = document.createElement('video');
+    call.on('stream', (userVideoStream) => {
+        addVideo(video, userVideoStream, true);
+    });
+    call.on('close', () => {
+        video.remove();
+    });
+    peerList[call.peer] = {
+        peer: call,
+        video
+    };
+});
 
 function initializePage() {
-    nameInput = document.getElementById('nameInput');
-    loginBtn = document.getElementById('loginBtn');
-    loginBtn.onclick = () => login();
+    initialCard = document.getElementById('initialCard');
+    playCard = document.getElementById('playCard');
 
-    localVideo = document.getElementById('localVideo');
-    remoteVideo = document.getElementById('remoteVideo');
-    callerName = document.getElementById('callerName');
-    callBtn = document.getElementById('callBtn');
-    callBtn.onclick = () => call();
-    stopBtn = document.getElementById('stopBtn');
-    stopBtn.onclick = () => stop();
-}
+    createInput = document.getElementById('createInput');
+    createBtn = document.getElementById('createBtn');
+    createBtn.onclick = () => createRoom();
 
-socketConn.onopen = function () {
-    console.log("Connected to the signaling server");
-    initializePage();
-};
+    joinInput = document.getElementById('joinInput');
+    joinBtn = document.getElementById('joinBtn');
+    joinBtn.onclick = () => joinRoom();
 
-socketConn.onerror = (err) => {
-    console.log("Got error", err);
-};
+    videoCard = document.getElementById('videoCard');
 
-socketConn.onmessage = (msg) => {
-    console.log("Got message", msg);
-    let data = msg.data;
-    try {
-        data = JSON.parse(msg.data);
-    } catch (error) {
+    leaveBtn = document.getElementById('leaveBtn');
+    leaveBtn.onclick = () => leaveRoom();
 
-    }
-    switch (data.type) {
-        case 'login': {
-            handleLogin(data);
-            break;
-        }
-        case 'call': {
-            handleCall(data);
-            break;
-        }
-        case 'answer': {
-            handleAnswer(data);
-            break;
-        }
-        case 'stop': {
-            handleStop();
-            break;
-        }
-        case 'candidate': {
-            handleCandidate(data);
-            break;
-        }
-        
-    }
-};
+    socketConn.on('room-id', (id) => {
+        roomId = id;
+        console.log(`Created room ${roomId}`);
+        createInput.value = roomId;
+        sendMsg('join-room', roomId, userId);
+    });
 
-function sendMsg(message) {
-    socketConn.send(JSON.stringify(message));
-}
-
-function login() {
-    if (nameInput.value) {
-        myName = nameInput.value;
-        sendMsg({
-            type: 'login',
-            name: nameInput.value
+    socketConn.on('user-connected', (uId) => {
+        console.log(`New user ${uId} connected!`);
+        const call = myPeer.call(uId, localStream);
+        const video = document.createElement('video');
+        call.on('stream', (userVideoStream) => {
+            addVideo(video, userVideoStream, true);
         });
-    }
+        call.on('close', () => {
+            video.remove();
+        });
+
+        peerList[uId] = {
+            peer: call,
+            video
+        };
+    });
+
+    socketConn.on('user-disconnected', (uId) => {
+        if (peerList[uId]) {
+            console.log(`User disconnected ${uId}!`);
+            peerList[uId].peer.close();
+            peerList[uId].video.remove();
+        }
+    });
+
+    toggleCard('initial');
+}
+
+function sendMsg(type, ...message) {
+    socketConn.emit(type, ...message);
 }
 
 function getCameraMedia() {
@@ -104,91 +122,75 @@ function getCameraMedia() {
     });
 }
 
-function handleLogin(data) {
-    console.log('Logged in!');
+function addVideo(video, stream, mute) {
+    if (screen.width > 768) {
+        video.width = 250;
+        video.height = 188;
+    } else {
+        video.style.width = '100%';
+        video.style.height = 'auto';
+    }
+    video.srcObject = stream;
+    videoCard.appendChild(video);
+    video.muted = mute;
+    video.autoplay = true;
+}
+
+function toggleCard(card) {
+    if (card === 'initial') {
+        initialCard.style.visibility = 'unset';
+        playCard.style.visibility = 'hidden';
+        initialCard.style.height = 'auto';
+        playCard.style.height = '0';
+    } else {
+        playCard.style.visibility = 'unset';
+        initialCard.style.visibility = 'hidden';
+        playCard.style.height = 'auto';
+        initialCard.style.height = '0';
+    }
+}
+
+function createRoom() {
     getCameraMedia().then((stream) => {
         localStream = stream;
-        localVideo.srcObject = localStream;
-        const configuration = {
-            iceServers: [
-                {
-                    'urls': 'stun:stun.l.google.com:19302'
-                }
-            ]
-        };
-        webRTCConn = new webkitRTCPeerConnection(configuration);
-        localStream.getTracks().forEach(track => {
-            webRTCConn.addTrack(track, localStream);
-        });
-
-        remoteStream = new MediaStream();
-        webRTCConn.ontrack = (ev) => {
-            remoteStream.addTrack(ev.track);
-        };
-
-        webRTCConn.onicecandidate = (ev) => {
-            if (ev.candidate) {
-                sendMsg({
-                    type: 'candidate',
-                    candidate: ev.candidate,
-                    name: friendName
-                });
-            }
-        };
+        const video = document.createElement('video');
+        addVideo(video, localStream, true);
+        sendMsg('create-room', userId);
+        toggleCard('play');
     }).catch((err) => {
-
+        console.error(err);
+        alert(err);
     });
 }
 
-async function call() {
-    console.log('callerName : ', callerName);
-    if (callerName.value) {
-        friendName = callerName.value;
-        const offer = await webRTCConn.createOffer();
-        webRTCConn.setLocalDescription(offer);
-        sendMsg({
-            type: 'call',
-            offer,
-            name: friendName
+function joinRoom() {
+    roomId = joinInput.value;
+    if (roomId) {
+        getCameraMedia().then((stream) => {
+            localStream = stream;
+            const video = document.createElement('video');
+            addVideo(video, localStream, true);
+            sendMsg('join-room', roomId, userId);
+            toggleCard('play');
+        }).catch((err) => {
+            console.error(err);
         });
     }
 }
 
-async function handleCall(data) {
-    friendName = data.name;
-    webRTCConn.setRemoteDescription(new RTCSessionDescription(data.offer));
-    remoteVideo.srcObject = remoteStream;
-    const answer = await webRTCConn.createAnswer();
-    webRTCConn.setLocalDescription(answer);
-    console.log('friendName : ', friendName);
-    sendMsg({
-        type: 'answer',
-        answer,
-        name: friendName
+function leaveRoom() {
+    if (localStream) {
+        localStream.getTracks().forEach((track) => {
+            track.stop();
+        });
+    }
+    videoCard.childNodes.forEach((child) => {
+        child.remove();
     });
-}
-
-function handleAnswer(data) {
-    webRTCConn.setRemoteDescription(new RTCSessionDescription(data.answer));
-    remoteVideo.srcObject = remoteStream;
-}
-
-function handleCandidate(data) {
-    webRTCConn.addIceCandidate(new RTCIceCandidate(data.candidate));
-}
-
-function stop() {
-    sendMsg({
-        type: 'stop',
-        name: friendName
-    });
-    handleStop();
-}
-
-function handleStop() {
-    friendName = undefined;
-    remoteVideo.src = undefined;
-    webRTCConn.close();
-    webRTCConn.onicecandidate = null;
-    webRTCConn.onaddstream = null;
+    toggleCard('initial');
+    sendMsg('leave-room', userId);
+    roomId = undefined;
+    peerList = {};
+    createInput.value = '';
+    joinInput.value = '';
 }
